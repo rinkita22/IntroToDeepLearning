@@ -1,7 +1,6 @@
 from random import shuffle
 import numpy as np
-import torch.nn as nn
-import math
+
 import torch
 from torch.autograd import Variable
 
@@ -30,19 +29,7 @@ class Solver(object):
         self.train_acc_history = []
         self.val_acc_history = []
         self.val_loss_history = []
-    def calculate_mean(self, prediction, gTruth):
-        count = 0
-        for i in range(0, len(prediction)):
-            if prediction[i] == gTruth[i]:
-                count+=1
-        return count / len(prediction)
-    
-    def calculate_sum(self, prediction, gTruth):
-        count = 0
-        for i in range(0, len(prediction)):
-            if prediction[i] == gTruth[i]:
-                count+=1
-        return count
+
     def train(self, model, train_loader, val_loader, num_epochs=10, log_nth=0):
         """
         Train a given model with the provided data.
@@ -81,58 +68,49 @@ class Solver(object):
         #   [Epoch 1/5] VAL   acc/loss: 0.539/1.310                            #
         #   ...                                                                #
         ########################################################################
-        crossE = nn.CrossEntropyLoss()
-        r_loss = 0.0
-        for epoch in range(num_epochs):
-            for iteration, data in enumerate(train_loader, 0):
-                inputs, labels = data
-                optim.zero_grad()
-                outputs = model(inputs)
-                loss =  crossE(outputs, labels)
-                loss.backward()
-                optim.step()
-                r_loss += loss.item()
-                self.train_loss_history.append(math.log(loss))
-                if iteration % 100 == 99:
-                    print('Iteration %d / %d] Train loss: %0.4f' %
-                          (iteration + 1, iter_per_epoch, r_loss/100))
-                    r_loss = 0.0
-                    
-            r_loss = 0.0
-            train_acc = 0.0
-            for iteration, data in enumerate(train_loader, 0):
-                inputs, labels = data
-                optim.zero_grad()
-                outputs = model(inputs)
-                loss = crossE(outputs, labels)
-                y_pred = torch.argmax(outputs, dim=1)
-                r_loss += loss.item()
-                train_acc += self.calculate_mean(y_pred, labels)
-            train_acc = train_acc / len(train_loader)
-            self.train_acc_history.append(math.log(train_acc))
-            print('Epoch %d / %d] Train Accuracy / loss: %0.4f / %.4f' %
-                              (epoch+1, num_epochs, train_acc / iter_per_epoch, r_loss/iter_per_epoch))
 
-          
-        
-            r_loss = 0.0
-            val_acc = 0.0
-            for iteration, data in enumerate(val_loader, 0):
-                inputs, labels = data
-                optim.zero_grad()
-                outputs = model(inputs)
-                loss = crossE(outputs, labels)
-                y_pred = torch.argmax(outputs, dim=1)
-                r_loss += loss.item()
-                val_acc += self.calculate_mean(y_pred, labels)
-            val_acc = val_acc/len(val_loader)
-            self.val_acc_history.append(math.log(val_acc / iter_per_epoch))
-            self.val_loss_history.append(math.log(r_loss / iter_per_epoch))
-            print('Epoch %d / %d] Val Accuracy / loss: %0.4f / %.4f' %
-                              (epoch+1, num_epochs, val_acc / iter_per_epoch, r_loss/iter_per_epoch))
+        for t in range(num_epochs):
+            for idx, batch in enumerate(train_loader):
+                images, labels = batch
+                scores, loss = self._step(model, optim, images,labels)
 
-        
+                self.train_loss_history.append(loss)
+                if idx % log_nth == 0:
+                    print('Epoch %d / %d: \tloss: %f' %
+                        (t+1, num_epochs, loss))
+
+                if idx == len(train_loader) - 1:
+                    acc = self.check_accuracy( scores, labels )
+                    self.train_acc_history.append(acc)
+                    print('Epoch %d / %d: \tloss: %f \t training accuracy: %f' %
+                            (t+1, num_epochs, loss, acc))
+            best_acc = 0.
+            for batch in val_loader:
+                images, labels = batch
+                scores = model(images)
+                val_acc = self.check_accuracy(scores, labels)
+                if val_acc > best_acc:
+                    best_acc = val_acc
+            self.val_acc_history.append(best_acc)
+            print('Epoch %d / %d: \t validation accuracy: %f' %
+                (t+1, num_epochs, best_acc))
+
         ########################################################################
         #                             END OF YOUR CODE                         #
         ########################################################################
         print('FINISH.')
+
+    def check_accuracy(self, scores, labels ):
+        indices = scores.argmax(1)
+        value = (indices == labels).sum().item()
+        return value/len(labels)
+
+    def _step(self, model, optim, images, labels ):
+        optim.zero_grad() 
+        scores = model(images)
+        
+        loss = self.loss_func( scores, labels )
+        loss.backward()
+        optim.step()
+
+        return scores, loss.item()
