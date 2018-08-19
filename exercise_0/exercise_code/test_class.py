@@ -10,7 +10,7 @@ class TestClass(object):
         #                                                                      #
         # Hint: Why would you need a hint?                                     #
         ########################################################################
-        self.text = 'Hello World'
+        self.text = 'Hello All'
 
         ########################################################################
         #                       END OF YOUR CODE                               #
